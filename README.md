@@ -110,6 +110,7 @@ does not match. Restart the server after downloading. Options: `--opencv` or `--
 | D. Facial movement observation | Observation lab, interview side panel | `static/js/observer_core.js`, `observer.js`, `routers/observations.py`, `pages/observe.js` |
 | E. Evidence and case management | Evidence, case tabs | `routers/evidence.py`, `storage.py`, `pages/evidence.js` |
 | F. Reports and analytics | Reports & analytics | `reports.py`, `pages/reports.js` |
+| Add-on: Gaze observation + heart rate | Observation lab (bottom), interview side panel, `#/gaze/<id>` | `gaze.py`, `gaze_demo.py`, `routers/gaze.py`, `static/js/gaze_core.js`, `gaze.js`, `pages/gaze.js` - see section 13 |
 
 What the observation module measures: head yaw/pitch/roll from MediaPipe's facial transformation matrix; blink events
 (eye-blink blendshape above 0.5, back below 0.35, 0.04-1 s); eye closures longer than 1 s; head turns (|yaw| > 20 deg
@@ -133,10 +134,12 @@ sightline/
     vision.py               YuNet/Haar detection, quality metrics, SFace embeddings, annotation
     consistency.py          interview summary + difference heuristic
     reports.py              PDF and JSON export
+    gaze.py gaze_demo.py    gaze observation: wording, summaries, exports; synthetic demo session
     seed.py                 fictional demo data
-    routers/                auth, cases, evidence, faces, interviews, observations, misc
-    static/                 index.html, css/app.css, js/ (core, charts, observer, pages/*)
+    routers/                auth, cases, evidence, faces, interviews, observations, gaze, misc
+    static/                 index.html, css/app.css, js/ (core, charts, observer, gaze_core, gaze, pages/*)
   scripts/fetch_models.py   optional, verified model downloads
+  scripts/migrate.py        gaze-module database migration: --status / --rollback
   models/                   ONNX / .task files (not committed)
   data/                     created at runtime: sightline.db, vault/, vault.key, session.key
   tests/                    pytest suites + tests/js (Node unit tests)
@@ -155,7 +158,7 @@ stop the server and delete the `data` folder.
 ```bat
 .venv\Scripts\python -m pip install -r requirements-dev.txt
 .venv\Scripts\python -m pytest -q tests
-REM      node --test tests\js\observer_core.test.js      (needs Node.js)
+REM      node --test tests\js\observer_core.test.js tests\js\gaze_core.test.js      (needs Node.js 18+)
 ```
 
 * `tests/test_core.py` - auth, throttling, CSRF header, roles, user rules, case CRUD/search/filters, evidence upload
@@ -168,6 +171,12 @@ REM      node --test tests\js\observer_core.test.js      (needs Node.js)
   until `fetch_models.py` has been run.
 * `tests/js/observer_core.test.js` - head-pose maths, blink/long-closure/head-turn/tracking/low-light events,
   landmark motion, brightness/sharpness.
+* `tests/test_gaze.py` - gaze consent required and enforced, separate heart-rate consent, withdrawal deletes data,
+  raw media rejected, no image/BLOB columns, every "not reliably measurable" rule, per-question summary, dominant
+  direction hidden below 60% usable, CSV/JSON export, only the four reviewer tags, no automatic tags or judgement words,
+  exact disclaimers in the PDF, case deletion cascade, demo seed.
+* `tests/js/gaze_core.test.js` - iris offsets and the subject-perspective sign convention, hysteresis and dwell (no
+  flicker), unavailable frames, blink vs prolonged closure, calibration, Bluetooth heart-rate parsing, neutral labels.
 
 Manual test cases for the demo (expected result in brackets):
 
@@ -186,6 +195,10 @@ Manual test cases for the demo (expected result in brackets):
 | 11 | Observation lab without consent tick | webcam does not start |
 | 12 | Leave the observation page while recording | camera light goes off |
 | 13 | PDF report | sections tagged measured / model / human; disclaimer on every page |
+| 14 | Gaze card: press Start before recording consent | start buttons disabled |
+| 15 | Gaze: second person steps into view | labels become "unavailable", flag *multiple faces* |
+| 16 | Gaze: *Withdraw consent* while recording | capture stops, camera off, data under that consent deleted |
+| 17 | Gaze review page: click timeline, save without a tag | refused; only the 4 neutral tags are offered |
 
 ## 9. Feature checklist
 
@@ -198,6 +211,7 @@ Manual test cases for the demo (expected result in brackets):
 | Face mesh, head orientation over time, gaze proxies, blink events and rate, landmark motion, tracking/quality, event timeline | Done (needs webcam or video; MediaPipe from CDN or `fetch_models.py`) |
 | Evidence uploads, metadata, SHA-256, integrity checks, notes, demo labels, access control, encryption at rest | Done |
 | PDF report separating measured / model / human content; JSON export; analytics | Done |
+| Add-on: gaze direction measurement with consent, calibration, quality rules, timeline, reviewer tags, exports; optional Bluetooth heart rate | Done (tested with a stand-in face model and Bluetooth device; see section 13) |
 | Consent notices, retention for references, no deception/guilt labels, disclaimers | Done |
 | Video recording of interviews | Not done (audio only, by design: avoids storing biometric video) |
 | Trained low-resolution recogniser (deck's EfficientNet) | Not done - needs training data and GPU |
@@ -255,5 +269,118 @@ Verified by running it (Linux, Python 3.13, OpenCV 4.14, headless Chromium):
   was used; the real MediaPipe library and WebAssembly files did load. Please check the Observation lab with a real
   webcam on your own machine before the demo.
 
+* The gaze module was run in Chromium with a fake camera, a stand-in face model that places the irises on a known
+  script (look ahead, look right, two faces, no face, look up, blink) and a stand-in Bluetooth chest strap. A 52-check
+  browser test confirmed consent gating, calibration, labels, unavailable handling, markers, pause, camera loss,
+  withdrawal, the single-camera lock, heart-rate recording, the review page, tags and exports. **No real eyes and no
+  real watch or strap were measured**; accuracy on real faces is unknown.
+
 Not verified: running on Windows itself (START_SIGHTLINE.py, paths and Windows fonts are written for it but were not
 executed there), Firefox/Safari, and audio recording with a real microphone.
+
+## 13. Gaze Observation: Scope and Limits
+
+**What it is.** An optional add-on that estimates *where the irises sit inside the eye openings* from a webcam or a
+video file, about 10 times per second, and labels it left / center / right and up / center / down. Left and right are
+from the **subject's own** point of view. Optionally it also records heart rate from a Bluetooth chest strap or watch.
+It appears at the bottom of the Observation lab and in the interview side panel; saved sessions open at `#/gaze/<id>`
+and are listed on the case's *Observations* tab.
+
+**What it never does.** It never says whether anyone is lying, truthful, guilty, nervous, stressed, credible or a risk,
+and it never identifies anyone. It produces no score, rank or alert about a person and never tags anything by itself.
+Eye movement and heart rate do not establish truthfulness or deception. Exact wording used in the app and reports:
+
+* Live status: *"Measuring visible gaze direction and tracking quality only."*
+* Per-question summary: *"Measurements describe camera-observed movement only. They do not show what a person is
+  thinking or whether an answer is truthful."*
+* Report: *"Eye and gaze measurements are affected by camera position, lighting, glasses, head movement, fatigue, and
+  many other factors. They must not be used to infer truthfulness, deception, guilt, intent, or mental state."*
+* *"Direction estimates can be affected by camera placement, lighting, glasses, head position, distance, and tracking
+  quality."*
+
+**Consent.** Gaze observation needs its own recorded consent (separate from the interview consent): subject reference,
+optional form number, the statement shown, its version, who confirmed it and when. Heart rate needs a second, separate
+consent. *Withdraw consent* stops capture immediately, discards unsaved data and deletes anything already saved under
+that consent. If the camera permission is revoked or the camera is unplugged, capture stops and a *camera lost* marker
+is added; the operator then chooses Save or Discard.
+
+**What is stored.** Per sample: time, the two labels, smoothed offsets (-1..1), how long the label has held, gaze-shift /
+blink / eye-closure events, closure duration, head yaw/pitch/roll, face visible, tracking confidence, quality flags and
+the linked question. Plus markers, calibration result, settings, software versions, achieved frame rate, the
+glasses tick box, consent records and reviewer annotations. **Never stored:** video, frames, screenshots, eye or iris
+images, face templates or embeddings. The server rejects any payload with unexpected fields or embedded media, and the
+database has no image columns. Pupil diameter is not used.
+
+**Not reliably measurable.** Direction is reported as `unavailable` (and excluded from summaries) when: no face; more
+than one face (gaze processing stops); eyes closed; iris outside the eye opening; head turned more than 25 deg or tilted
+more than 20 deg; or tracking confidence below 0.5. Tracking confidence is a documented heuristic (face size, head
+angle, light, blur, agreement between the two eyes, glare, calibration), **not a model probability**. Quality flags:
+low light, glare, glasses or occlusion, extreme head turn, face too small, motion blur, multiple faces, iris not
+visible, camera angle issue (no calibration).
+
+**Processing (all in the browser).** MediaPipe Face Landmarker 0.10.14 (478 landmarks incl. irises, up to 2 faces).
+Horizontal offset = iris position along the eye-corner axis, vertical = distance from that axis, averaged over both
+eyes. Smoothing: exponential, alpha 0.35, restarted after gaps over 500 ms. Hysteresis: a label starts at |offset|
+0.35 (vertical 0.40) and ends below 0.20 (vertical 0.25), and must persist 200 ms. Returning from an unavailable gap is
+not counted as a gaze shift. Blinks: eye-blink score above 0.5, back below 0.35, 40-1000 ms; longer is an eye closure.
+All values are in `static/js/gaze_core.js` (`SETTINGS`) and saved with every session.
+
+**Calibration (optional, 25 s).** The subject looks at the camera lens; the median offset is subtracted for that
+session only. It is *completed* when at least 60% of frames are usable and the spread is at most 0.15, otherwise
+*poor* (not applied). It is not a personal baseline and is never reused.
+
+**Review.** Timeline with horizontal and vertical bands, confidence line, heart-rate line, markers and annotations.
+Clicking shows the period's measurements and a blank note with exactly four tags: Review later, Technical issue,
+Context note, Not relevant. The per-question table shows duration, usable vs unavailable %, gaze shifts, blinks, eye
+closure, the most frequent direction (only when at least 60% of the samples are usable), heart rate and data-quality
+warnings. Exports: samples CSV, heart-rate CSV, versioned JSON (`sightline.gaze-session` v1) and the PDF section.
+
+**Heart rate / your watch.** Uses the standard Bluetooth Heart Rate service in Chrome or Edge. Chest straps and
+watches with a "broadcast heart rate" setting work (Polar H10, Wahoo TICKR, Coospo, many Garmin models). Most
+smartwatches that sync only to a phone app (including most Titan models) do **not** expose it; use *Check a device*
+to test yours - it reads no values, it just reports whether the service exists. Heart rate changes with movement,
+speaking, posture, caffeine and nerves; it is not a lie detector.
+
+**Demo data.** The demo case contains one synthetic session (generated numbers, no camera) with face loss, two faces,
+a head turn, eye closure, low light, a pause and heart rate, so the timeline and summaries can be shown without a
+webcam.
+
+### Migration and rollback
+
+The change is **additive**: six new tables (`consents`, `obs_sessions`, `gaze_samples`, `obs_markers`,
+`reviewer_annotations`, `hr_samples`) and schema version 2. No existing table or column changes.
+
+1. Stop Sightline. Optionally copy `data\sightline.db` somewhere safe.
+2. Start Sightline as usual - the tables are created automatically. Or run `python scripts\migrate.py` and check
+   with `python scripts\migrate.py --status`.
+
+Rollback, from least to most drastic:
+
+* **Hide the module:** set `GAZE_MODULE=0` in `.env` (or the environment) and restart. The API, the cards and the
+  report section disappear; saved data is kept.
+* **Remove the data:** stop Sightline, run `python scripts\migrate.py --rollback`. A timestamped backup of the
+  database is written first, then only the six gaze tables are dropped.
+* **Old code:** the previous version runs unchanged on a migrated database (verified), because nothing it uses was
+  altered. Re-applying the module later is just starting the new version again.
+
+### Files added or modified for this module
+
+Added: `app/gaze.py`, `app/gaze_demo.py`, `app/routers/gaze.py`, `app/static/js/gaze_core.js`,
+`app/static/js/gaze.js`, `app/static/js/pages/gaze.js`, `scripts/migrate.py`, `tests/test_gaze.py`,
+`tests/js/gaze_core.test.js`.
+
+Modified: `app/config.py` (GAZE_MODULE switch), `app/db.py` (new tables, schema version), `app/main.py` (router),
+`app/seed.py` (synthetic demo session), `app/reports.py` (PDF/JSON gaze section), `app/routers/cases.py` (count),
+`app/routers/misc.py` (meta flag), `app/static/index.html` (scripts), `app/static/js/app.js` (route),
+`app/static/js/observer.js` (shared model loader with a face-count option, single-camera lock),
+`app/static/js/pages/cases.js`, `pages/interviews.js`, `pages/observe.js`, `pages/reports.js` (cards, lists, report
+option), `app/static/css/app.css`, `.env.example`, `README.md`. Existing behaviour of these files is unchanged; all
+earlier tests still pass.
+
+### Running the gaze tests
+
+```bat
+.venv\Scripts\python -m pytest -q tests\test_gaze.py
+node --test tests\js\gaze_core.test.js
+```
+

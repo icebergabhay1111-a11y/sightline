@@ -26,7 +26,8 @@ class CasePatch(BaseModel):
 COUNTS = """(SELECT COUNT(*) FROM evidence e WHERE e.case_id=c.id) AS evidence_count,
  (SELECT COUNT(*) FROM analyses a WHERE a.case_id=c.id) AS analyses_count,
  (SELECT COUNT(*) FROM interviews i WHERE i.case_id=c.id) AS interviews_count,
- (SELECT COUNT(*) FROM observations o WHERE o.case_id=c.id) AS observations_count"""
+ (SELECT COUNT(*) FROM observations o WHERE o.case_id=c.id) AS observations_count,
+ (SELECT COUNT(*) FROM obs_sessions g WHERE g.case_id=c.id) AS gaze_count"""
 
 
 @router.get("/cases")

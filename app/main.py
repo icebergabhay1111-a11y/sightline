@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import APP_NAME, APP_VERSION, config, db, security, seed
-from .routers import auth, cases, evidence, faces, interviews, misc, observations
+from .routers import auth, cases, evidence, faces, gaze, interviews, misc, observations
 
 STATIC = Path(__file__).parent / "static"
 
@@ -30,6 +30,8 @@ app.add_middleware(SessionMiddleware, secret_key=config.session_secret(), sessio
                    max_age=config.SESSION_HOURS * 3600, same_site="lax", https_only=config.COOKIE_SECURE)
 for r in (auth, cases, evidence, faces, interviews, observations, misc):
     app.include_router(r.router)
+if config.GAZE_ENABLED:
+    app.include_router(gaze.router)
 
 
 @app.get("/models/face_landmarker.task")

@@ -72,7 +72,7 @@
       Overview: async () => h('div', { class: 'grid g-main' },
         h('div', { class: 'card' }, h('h3', null, 'Description'), h('p', { style: 'white-space:pre-wrap' }, c.description || '-'),
           h('p', { class: 'dim' }, `Created ${fmtTime(c.created_at)} by ${c.created_by_name || '-'}; last updated ${fmtTime(c.updated_at)}.`)),
-        h('div', { class: 'card' }, h('h3', null, 'Contents'), [['Evidence', c.evidence_count, 'Evidence'], ['Face analyses', c.analyses_count, 'Analyses'], ['Interviews', c.interviews_count, 'Interviews'], ['Observations', c.observations_count, 'Observations']]
+        h('div', { class: 'card' }, h('h3', null, 'Contents'), [['Evidence', c.evidence_count, 'Evidence'], ['Face analyses', c.analyses_count, 'Analyses'], ['Interviews', c.interviews_count, 'Interviews'], ['Observations', c.observations_count, 'Observations'], ['Gaze sessions', c.gaze_count || 0, 'Observations']]
           .map(([l, n, t]) => h('div', { class: 'list-item' }, h('span', null, l), h('button', { class: 'btn small', onclick: () => go(t) }, `${n} - view`))))),
       Evidence: async () => {
         const ev = await api('/api/evidence?case_id=' + id);
@@ -93,10 +93,13 @@
       },
       Observations: async () => {
         const ob = await api('/api/observations?case_id=' + id);
+        const gz = App.meta && App.meta.gaze_enabled === false ? null : await App.gazeSessionList({ case_id: id });
         return h('div', null, h('div', { style: 'margin-bottom:10px' }, h('a', { class: 'btn primary', href: '#/observe?case=' + id }, 'Open observation lab')),
+          gz ? h('h3', null, 'Facial-movement observations') : null,
           ob.length ? tbl(['#', 'Source', 'Duration', 'Tracked', 'Blink events', 'Saved'], ob.map((o) => h('tr', { class: 'click', onclick: () => (location.hash = '#/observation/' + o.id) },
             h('td', null, o.id), h('td', null, `${o.source} ${o.source_name || ''}`, ' ', demoBadge(o.is_demo)), h('td', null, o.duration_s.toFixed(0) + ' s'),
-            h('td', null, Math.round((o.summary.tracked_fraction || 0) * 100) + '%'), h('td', null, o.summary.blink_count), h('td', { class: 'dim' }, fmtTime(o.created_at))))) : empty('No observations recorded.'));
+            h('td', null, Math.round((o.summary.tracked_fraction || 0) * 100) + '%'), h('td', null, o.summary.blink_count), h('td', { class: 'dim' }, fmtTime(o.created_at))))) : empty('No observations recorded.'),
+          gz ? h('h3', { style: 'margin-top:18px' }, 'Gaze observation sessions') : null, gz);
       },
       Timeline: async () => {
         const ev = await api(`/api/cases/${id}/timeline`);

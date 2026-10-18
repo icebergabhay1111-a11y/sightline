@@ -58,7 +58,7 @@
     if (cur < 0) cur = 0;
     if (ctx.query.q) cur = Math.min(Math.max(+ctx.query.q - 1, 0), iv.items.length - 1);
     let dirty = false, timer = null, observer = null, recorder = null, recStream = null, saving = null;
-    const main = h('div'), qlist = h('div'), obsHost = h('div'), summaryBox = h('div'), savedLbl = h('span', { class: 'dim', style: 'font-size:12px' });
+    const main = h('div'), qlist = h('div'), obsHost = h('div'), gazeHost = h('div'), gazeList = h('div'), summaryBox = h('div'), savedLbl = h('span', { class: 'dim', style: 'font-size:12px' });
 
     async function save() {
       clearTimeout(timer);
@@ -77,6 +77,7 @@
       await save();
       cur = Math.min(Math.max(i, 0), iv.items.length - 1);
       if (observer && observer.running) observer.mark(`Question ${iv.items[cur].position} shown`);
+      if (gazeCtl) gazeCtl.onQuestion(iv.items[cur].position, `Q${iv.items[cur].position}: ${iv.items[cur].question_text}`);
       paintMain(); paintList();
     }
 
@@ -157,6 +158,7 @@
       if (!(await confirmDialog(unanswered ? `${unanswered} question(s) have no response. Complete the interview anyway? You can reopen it later.` : 'Complete this interview and generate the structured summary?', 'Complete', 'primary'))) return;
       try {
         if (observer && observer.running) await stopObservation(true);
+        if (gazeCtl && (gazeCtl.running() || gazeCtl.hasUnsaved())) await gazeCtl.stopAndSave();
         await api(`/api/interviews/${id}/complete`, { method: 'POST' });
         iv = await api('/api/interviews/' + id);
         toast('Interview completed - summary generated', 'ok');
@@ -231,14 +233,32 @@
       }
     }
 
-    function paintAll() { paintMain(); paintList(); paintSummary(); paintObservation(); }
+    // ------------------------------------------------------------- optional gaze observation (separate consent)
+    let gazeCtl = null;
+    const gazeOn = () => !(App.meta && App.meta.gaze_enabled === false);
+    async function paintGazeList() {
+      if (!gazeOn()) return;
+      try { gazeList.replaceChildren(h('div', { class: 'card', style: 'margin-top:16px' }, h('h3', null, 'Gaze sessions for this interview'), await App.gazeSessionList({ interview_id: id }, true))); } catch (e) { fail(e); }
+    }
+    function paintGaze() {
+      if (!gazeOn() || readOnly()) {
+        if (gazeCtl) { gazeCtl.destroy(); gazeCtl = null; }
+        gazeHost.replaceChildren(); return;
+      }
+      if (gazeCtl) return;                       // keep a running capture across repaints
+      gazeCtl = GazeUI.capture({ caseId: () => iv.case_id, interviewId: +id, subjectRef: iv.subject_ref, isDemo: () => !!iv.is_demo,
+        getQuestion: () => ({ id: iv.items[cur].position, text: `Q${iv.items[cur].position}: ${iv.items[cur].question_text}` }), onSaved: paintGazeList });
+      gazeHost.replaceChildren(h('div', { style: 'margin-top:16px' }, gazeCtl.el));
+    }
+
+    function paintAll() { paintMain(); paintList(); paintSummary(); paintObservation(); paintGaze(); paintGazeList(); }
     root.append(h('div', { class: 'row sp' }, h('div', null,
       h('div', { class: 'row' }, h('h1', { style: 'margin:0' }, `Interview #${id}`), badge(iv.status.replace('_', ' '), iv.status === 'completed' ? 'b-ok' : 'b-warn'), demoBadge(iv.is_demo)),
       h('p', { class: 'sub', style: 'margin-top:4px' }, 'Subject ', h('b', null, iv.subject_ref), ' - case ', h('a', { href: '#/cases/' + c.id + '?tab=Interviews' }, c.case_number), ` - consent: ${iv.consent_note || 'recorded'}`)),
       h('a', { class: 'btn', href: '#/interviews' }, 'All interviews')),
       !can('investigator') ? h('div', { class: 'notice info', style: 'margin-bottom:12px' }, 'Read-only view (viewer role).') : null,
       h('div', { class: 'grid g-main' }, h('div', null, main, summaryBox),
-        h('div', null, h('div', { class: 'card' }, h('h3', null, 'Questions'), qlist), h('div', { style: 'margin-top:16px' }, obsHost))));
+        h('div', null, h('div', { class: 'card' }, h('h3', null, 'Questions'), qlist), h('div', { style: 'margin-top:16px' }, obsHost), gazeHost, gazeList)));
     paintAll();
 
     return () => { // cleanup when leaving the page
@@ -248,6 +268,7 @@
         fetch(`/api/interviews/${id}/items/${it.position}`, { method: 'PATCH', keepalive: true, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' }, body: JSON.stringify({ response_text: it.response_text, notes: it.notes, follow_up: !!it.follow_up }) });
       }
       if (observer) { observer.stop(); observer = null; }
+      if (gazeCtl) { gazeCtl.destroy(); gazeCtl = null; }
       if (recorder && recorder.state === 'recording') { recorder.onstop = null; recorder.stop(); }
       if (recStream) recStream.getTracks().forEach((t) => t.stop());
     };

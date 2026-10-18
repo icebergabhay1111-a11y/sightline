@@ -1,13 +1,15 @@
 (function () {
   const { h, api, fmtTime, badge, empty, field, fail, toast } = App;
-  const SECTIONS = [
+  const ALL_SECTIONS = [
     ['case', 'Case summary and status', 'human'], ['interviews', 'Interview questions, recorded responses and flagged differences', 'measured'],
     ['faces', 'Face-detection results and image-quality flags', 'model'], ['matches', 'Optional reference matching, scores and human decisions', 'model'],
-    ['observations', 'Visual-observation timelines and measurements', 'measured'], ['evidence', 'Evidence inventory with SHA-256 hashes', 'measured'],
+    ['observations', 'Visual-observation timelines and measurements', 'measured'],
+    ['gaze', 'Gaze observation: timeline, per-question summary, consent and reviewer annotations', 'measured'], ['evidence', 'Evidence inventory with SHA-256 hashes', 'measured'],
     ['notes', 'Reviewer notes and unresolved items', 'human'], ['software', 'Model and software details', 'measured'],
   ];
 
   App.pages.reports = async (root, ctx) => {
+    const SECTIONS = ALL_SECTIONS.filter(([k]) => k !== 'gaze' || !(App.meta && App.meta.gaze_enabled === false));
     const { options } = await App.caseOptions(ctx.query.case || '');
     const caseSel = h('select', null, h('option', { value: '' }, 'Choose a case...'), options);
     const checks = Object.fromEntries(SECTIONS.map(([k]) => [k, h('input', { type: 'checkbox', checked: true })]));

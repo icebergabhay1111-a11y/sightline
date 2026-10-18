@@ -6,7 +6,7 @@ import random
 import cv2
 import numpy as np
 
-from . import config, consistency, db, security, storage, util
+from . import config, consistency, db, gaze, gaze_demo, security, storage, util
 from .routers.interviews import seed_questions
 from .routers.observations import summarize
 
@@ -111,7 +111,16 @@ def seed_demo():
               VALUES(?,?,?,?,?,?,?,?,?,?,?,1,?,?)""",
            (c1, done, "file", "synthetic_demo_session (generated, not from a camera)", now, 60.0, json.dumps(s), json.dumps(ev), json.dumps(summarize(s, ev, 60.0)),
             json.dumps({"library": "synthetic demo generator", "version": "-", "model": "none (not from a camera)", "sample_fps": 10}), "", uid, now))
-    db.log(admin, "demo_seeded", f"{len(ids)} fictional cases with evidence, interviews and one synthetic observation")
+    # DEMO-only synthetic gaze-observation session (generated numbers, no camera, no real person)
+    g = gaze.create_consent_record(c1, done, "S-01 (fictional)", "gaze_observation", "DEMO-CF-001 (synthetic)", True, uid)
+    hrc = gaze.create_consent_record(c1, done, "S-01 (fictional)", "heart_rate", "DEMO-CF-001 (synthetic)", True, uid)
+    d = gaze_demo.synthetic_session()
+    gaze.store_session({"case_id": c1, "interview_id": done, "consent_id": g, "hr_consent_id": hrc, "started_at": now, "ended_at": now,
+                        "source_type": "file", "source_name": "synthetic_demo_gaze_session (generated, not from a camera)",
+                        "calibration": d["calibration"], "settings_version": gaze.SETTINGS_VERSION, "settings": d["settings"],
+                        "software": d["software"], "glasses_declared": False, "is_demo": True},
+                       d["samples"], d["markers"], d["heart_rate"], uid)
+    db.log(admin, "demo_seeded", f"{len(ids)} fictional cases with evidence, interviews, one synthetic observation and one synthetic gaze session")
     return ids
 
 

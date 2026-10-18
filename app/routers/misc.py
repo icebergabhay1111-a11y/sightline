@@ -18,7 +18,7 @@ def health():
 @router.get("/meta")
 def meta(user=Depends(security.viewer)):
     return {"app": APP_NAME, "version": APP_VERSION, "disclaimer": DISCLAIMER, "max_upload_mb": config.MAX_UPLOAD_MB,
-            "vision": vision.engine.status(), "match_threshold": config.MATCH_COSINE_THRESHOLD}
+            "vision": vision.engine.status(), "match_threshold": config.MATCH_COSINE_THRESHOLD, "gaze_enabled": config.GAZE_ENABLED}
 
 
 @router.get("/events")

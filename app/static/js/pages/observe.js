@@ -72,7 +72,16 @@
       recent.replaceChildren(ob.length ? ob.slice(0, 10).map((o) => h('div', { class: 'list-item' }, h('a', { href: '#/observation/' + o.id }, `#${o.id} ${o.source === 'webcam' ? 'webcam' : o.source_name || 'video file'}`),
         h('span', { class: 'dim', style: 'font-size:12px;white-space:nowrap' }, `${o.duration_s.toFixed(0)} s - ${fmtTime(o.created_at)}`))) : h('p', { class: 'dim' }, 'None yet.'));
     }
-    caseSel.onchange = () => loadRecent().catch(fail);
+    caseSel.onchange = () => { loadRecent().catch(fail); loadGaze().catch(fail); };
+
+    // Gaze observation: separate module with its own consent; shares the camera lock with the observer above.
+    const gazeOn = !(App.meta && App.meta.gaze_enabled === false);
+    const gazeRecent = h('div');
+    async function loadGaze() {
+      if (!gazeOn) return;
+      gazeRecent.replaceChildren(caseSel.value ? await App.gazeSessionList({ case_id: caseSel.value }, true) : h('p', { class: 'dim' }, 'Choose a case to see its gaze sessions.'));
+    }
+    const gazeCtl = gazeOn && can('investigator') ? GazeUI.capture({ caseId: () => caseSel.value, allowFile: true, questionButton: true, isDemo: () => demo.checked, onSaved: () => loadGaze().catch(fail) }) : null;
 
     function drawLive() {
       if (!observer || !observer.series) return;
@@ -142,7 +151,8 @@
     }
     stopBtn.onclick = finish;
 
-    root.append(h('h1', null, 'Observation lab'), h('p', { class: 'sub' }, 'Visualise the face mesh, head orientation, blink events and landmark motion from a webcam or an uploaded video.'),
+    root.append(h('h1', null, 'Observation lab'), h('p', { class: 'sub' }, 'Visualise the face mesh, head orientation, blink events and landmark motion from a webcam or an uploaded video.',
+      gazeCtl ? h('span', null, ' Gaze direction measurement is a separate module with its own consent: ', h('a', { href: 'javascript:void 0', onclick: () => document.getElementById('gaze-lab').scrollIntoView({ behavior: 'smooth' }) }, 'Gaze observation')) : null),
       h('div', { class: 'notice warn', style: 'margin-bottom:16px' }, NOTICE),
       h('div', { class: 'grid g-main' },
         h('div', null, h('div', { class: 'card' }, view.el, h('div', { class: 'row', style: 'margin-top:10px' }, startBtn, stopBtn, status),
@@ -154,10 +164,13 @@
             consentLbl, h('label', { class: 'chk' }, demo, 'Fictional / demonstration session'))),
           h('div', { class: 'card' }, h('h3', null, 'Events as they occur'), feed, h('p', { class: 'dim', style: 'font-size:12px;margin:6px 0 0' }, 'Blinks are counted but not listed here.')),
           h('div', { class: 'card' }, h('h3', null, 'Saved for this case'), recent),
+          gazeOn ? h('div', { class: 'card' }, h('h3', null, 'Gaze sessions for this case'), gazeRecent) : null,
           h('div', { class: 'card' }, h('h3', null, 'About the measurements'),
-            h('p', { class: 'muted', style: 'font-size:12.5px;margin:0' }, 'Head pose comes from the face-landmark transformation matrix. Blinks are eye-closure events from the eye-blink blendshapes (thresholds are saved with each record). Gaze values are iris-direction proxies that mix with head pose. Landmark motion is the average landmark displacement per second, normalised by eye distance, and includes head movement. The library exposes no per-frame tracking confidence, so face presence, brightness and sharpness are reported instead.')))));
+            h('p', { class: 'muted', style: 'font-size:12.5px;margin:0' }, 'Head pose comes from the face-landmark transformation matrix. Blinks are eye-closure events from the eye-blink blendshapes (thresholds are saved with each record). Gaze values are iris-direction proxies that mix with head pose. Landmark motion is the average landmark displacement per second, normalised by eye distance, and includes head movement. The library exposes no per-frame tracking confidence, so face presence, brightness and sharpness are reported instead.')))),
+      gazeCtl ? h('div', { id: 'gaze-lab', style: 'margin-top:16px' }, gazeCtl.el) : null);
     await loadRecent();
-    return () => { clearInterval(chartTimer); if (observer) { observer.stop(); observer = null; } };
+    await loadGaze();
+    return () => { clearInterval(chartTimer); if (observer) { observer.stop(); observer = null; } if (gazeCtl) gazeCtl.destroy(); };
   };
 
   // ------------------------------------------------------------------ saved observation

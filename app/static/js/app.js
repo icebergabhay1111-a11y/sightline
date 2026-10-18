@@ -10,7 +10,7 @@
   // route -> [page function name, nav item to highlight]
   const ROUTES = {
     dashboard: ['dashboard', 'dashboard'], cases: ['cases', 'cases'], analysis: ['analysis', 'analysis'], references: ['references', 'references'],
-    interviews: ['interviews', 'interviews'], interview: ['interviewRun', 'interviews'], observe: ['observe', 'observe'], observation: ['observationView', 'observe'],
+    interviews: ['interviews', 'interviews'], interview: ['interviewRun', 'interviews'], observe: ['observe', 'observe'], observation: ['observationView', 'observe'], gaze: ['gazeView', 'observe'],
     evidence: ['evidence', 'evidence'], reports: ['reports', 'reports'], activity: ['activity', 'activity'], settings: ['settings', 'settings'],
   };
   const $ = (id) => document.getElementById(id);

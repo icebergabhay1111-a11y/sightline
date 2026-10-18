@@ -36,6 +36,8 @@ COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "0") == "1"
 # Matching: cosine-similarity reference value from the OpenCV SFace tutorial. NOT validated on our data.
 MATCH_COSINE_THRESHOLD = float(os.environ.get("MATCH_COSINE_THRESHOLD", "0.363"))
 REFERENCE_RETENTION_DAYS = int(os.environ.get("REFERENCE_RETENTION_DAYS", "30"))
+# Gaze Observation module (and its optional heart-rate add-on). Set GAZE_MODULE=0 in .env to hide it.
+GAZE_ENABLED = os.environ.get("GAZE_MODULE", "1") != "0"
 
 
 def _key_file(name, env, maker):

@@ -8,10 +8,13 @@
   const REMOTE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
   const MAX_SAMPLES = 40000;
   const KEYS = ['t', 'face', 'yaw', 'pitch', 'roll', 'energy', 'brightness', 'sharpness', 'blink', 'gaze_x', 'gaze_y', 'mouth_open'];
-  let cache = null;
+  const caches = new Map();   // key: delegate + numFaces
 
-  async function loadMediaPipe(delegate) {
-    if (cache && cache.delegate === delegate) return cache.p;
+  /* Shared loader. numFaces defaults to 1 (facial-movement observer); the gaze module asks for 2 so that a second
+     face in view can be detected and gaze processing suspended. */
+  async function loadMediaPipe(delegate, numFaces = 1) {
+    const key = delegate + ':' + numFaces;
+    if (caches.has(key)) return caches.get(key);
     const p = (async () => {
       let st = {};
       try { st = await App.api('/api/vision/status'); } catch (e) { /* defaults: CDN + remote model */ }
@@ -22,15 +25,25 @@
       const modelUrl = st.landmarker_model_local ? new URL('models/face_landmarker.task', location.href).href : REMOTE_MODEL;
       const lm = await mod.FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: modelUrl, delegate },
-        runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
+        runningMode: 'VIDEO', numFaces, outputFaceBlendshapes: true, outputFacialTransformationMatrixes: true,
         minFaceDetectionConfidence: 0.5, minFacePresenceConfidence: 0.5, minTrackingConfidence: 0.5,
       });
       return { mod, lm, modelUrl, local: !!st.mediapipe_local };
     })();
-    cache = { delegate, p };
-    p.catch(() => { cache = null; });
+    caches.set(key, p);
+    p.catch(() => { caches.delete(key); });
     return p;
   }
+
+  /* Only one module may use the webcam at a time (facial-movement observer OR gaze observation). */
+  const camera = {
+    owner: null,
+    claim(name) {
+      if (this.owner && this.owner !== name) throw new Error(`The camera is already in use by ${this.owner}. Stop it first, then start this one.`);
+      this.owner = name;
+    },
+    release(name) { if (this.owner === name) this.owner = null; },
+  };
 
   class Observer {
     constructor({ video, canvas, onUpdate, onEvent, onEnded, fps = 12 }) {
@@ -63,7 +76,10 @@
       }
       this.mp = mp;
       if (source === 'webcam') {
-        this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' }, audio: false });
+        camera.claim('the facial-movement observer');
+        this.cameraClaimed = true;
+        try { this.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 960 }, height: { ideal: 540 }, facingMode: 'user' }, audio: false }); }
+        catch (e) { this._release(); throw e; }
         this.video.srcObject = this.stream;
       } else {
         this.fileUrl = URL.createObjectURL(file);
@@ -143,6 +159,7 @@
     _release() {
       if (this.stream) this.stream.getTracks().forEach((tr) => tr.stop());
       this.stream = null;
+      if (this.cameraClaimed) { camera.release('the facial-movement observer'); this.cameraClaimed = false; }
       try { this.video.pause(); } catch (e) { /* ignore */ }
       this.video.srcObject = null;
       this.video.removeAttribute('src');
@@ -197,5 +214,5 @@
     return { el: h('div', null, wrap, bar, metrics), video, canvas, toggles, update, setMirror, bindToggles, showPlaceholder: () => { placeholder.style.display = ''; } };
   }
 
-  window.ObserverUI = { Observer, view };
+  window.ObserverUI = { Observer, view, loadMediaPipe, camera, MEDIAPIPE_VERSION: VER };
 })();

@@ -111,3 +111,17 @@ mark.hl{background:#6b5217;color:#ffe9b0;padding:0 2px;border-radius:3px}
 @media print{#sidebar,#topbar,#proto-banner,.btn,.toolbar{display:none!important}body{background:#fff;color:#000}}
 .list-item>*:first-child{min-width:0;overflow-wrap:anywhere}
 .list-item>*:last-child{flex:none}
+/* gaze observation */
+.gaze-card .gaze-status{margin-top:10px;font-size:12.5px;color:var(--mut);padding:6px 10px;border-radius:8px;background:var(--panel2)}
+.gaze-card .gaze-status.on{color:var(--cyan);box-shadow:inset 3px 0 0 var(--cyan)}
+.gaze-card .gaze-reason{min-height:18px;font-size:12px;color:var(--amber);margin-top:6px}
+.gaze-card .gaze-consent{background:var(--panel2);border-radius:8px;padding:10px;font-size:12.5px;line-height:1.5}
+.gaze-card .gaze-consent-ok{font-size:12.5px}
+.gaze-card .gaze-hr{margin-top:10px;background:var(--panel2);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.gaze-card .gaze-hr summary{cursor:pointer;font-weight:600;color:var(--mut)}
+.gaze-card .gaze-bpm{font-weight:700;color:var(--text)}
+.gaze-card .video-wrap{margin-top:10px;max-width:640px}
+.gaze-card table.gaze-quality td{padding:3px 6px;font-size:12px}
+.gaze-timeline{width:100%;height:auto;display:block;cursor:crosshair;user-select:none}
+.gaze-warn{font-size:12px;color:var(--amber)}
+.gaze-disclaimer{font-weight:600}

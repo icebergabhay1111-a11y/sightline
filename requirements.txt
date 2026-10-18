@@ -1,0 +1,10 @@
+# Sightline - runtime dependencies (tested on Python 3.10 - 3.12)
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+itsdangerous>=2.1
+# OpenCV 5 removed the Haar cascade fallback detector, so stay on 4.x
+opencv-python>=4.8,<5
+numpy>=1.24
+cryptography>=42
+reportlab>=4.0

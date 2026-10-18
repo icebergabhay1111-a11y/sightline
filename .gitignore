@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+models/*.onnx
+models/*.task
+.pytest_cache/
+!models/README.txt
+app/static/vendor/
+.packages/

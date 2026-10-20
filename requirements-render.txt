@@ -1,0 +1,10 @@
+# Server deployment (Render or any Linux host). Same libraries as requirements.txt, but the
+# "headless" OpenCV build, which needs no desktop graphics libraries on a server.
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+itsdangerous>=2.1
+opencv-python-headless>=4.8,<5
+numpy>=1.24
+cryptography>=42
+reportlab>=4.0

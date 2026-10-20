@@ -1,0 +1,23 @@
+# Render Blueprint: Render reads this file and creates the web service automatically.
+# Free plan: the service sleeps after ~15 minutes without visitors (first visit then takes ~1 minute) and its disk is
+# temporary, so cases you add are lost on restart or redeploy. The fictional demo data is recreated on every start.
+services:
+  - type: web
+    name: sightline
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-render.txt && (python scripts/fetch_models.py || echo "Optional models not downloaded; continuing")
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: COOKIE_SECURE          # site is served over HTTPS, so session cookies are HTTPS-only
+        value: "1"
+      - key: DEMO_PASSWORD          # random password for admin / investigator / viewer; see Environment tab in Render
+        generateValue: true
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      - key: GAZE_MODULE
+        value: "1"
